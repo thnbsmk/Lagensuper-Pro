@@ -1,0 +1,44 @@
+name: PRO R8 Supabase Auth Verify
+
+on:
+  push:
+    branches:
+      - agent/pro-r8-supabase-auth-v1
+  pull_request:
+    paths:
+      - 'lsuperagent-pro/app/login/**'
+      - 'lsuperagent-pro/app/chat/**'
+      - 'lsuperagent-pro/components/auth/**'
+      - 'lsuperagent-pro/components/chat/**'
+      - 'lsuperagent-pro/lib/auth/**'
+      - 'lsuperagent-pro/tests/pro-r8-*.test.ts'
+      - 'lsuperagent-pro/tests/pro-r8-*.test.tsx'
+      - 'lsuperagent-pro/.env.example'
+      - '.github/workflows/pro-r8-supabase-auth-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: PRO R8 Supabase auth verification
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: lsuperagent-pro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: lsuperagent-pro/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm vitest run tests/pro-r8-auth-ui-contract.test.tsx
+      - run: pnpm vitest run
+      - run: pnpm lint
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build

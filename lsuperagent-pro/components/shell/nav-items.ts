@@ -4,11 +4,13 @@ import {
   Brain,
   FileClock,
   Gauge,
+  House,
   Settings,
   Wrench,
 } from 'lucide-react'
 
 export const navItems = [
+  { label: 'Home', href: '/', icon: House },
   { label: 'Chat', href: '/chat', icon: Bot },
   { label: 'Projects', href: '/projects', icon: Boxes },
   { label: 'Memory', href: '/memory', icon: Brain },

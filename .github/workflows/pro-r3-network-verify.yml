@@ -1,0 +1,209 @@
+name: LSUPERAGENT PRO R3 Network Verify
+
+on:
+  push:
+    branches:
+      - agent/pro-r3-prelive-gateway-v1
+    paths:
+      - '.github/workflows/pro-r3-network-verify.yml'
+      - 'lsuperagent-pro/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  r3-network-verify:
+    name: R3 signed HTTPS round-trip
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout PRO source
+        uses: actions/checkout@v4
+
+      - name: Checkout canonical gateway source
+        uses: actions/checkout@v4
+        with:
+          repository: thanabartb-ops/W
+          ref: agent/lsuperagent-r3-canonical-gateway-v1
+          path: canonical
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install PRO dependencies
+        working-directory: lsuperagent-pro
+        run: pnpm install --frozen-lockfile
+
+      - name: Install canonical dependencies
+        working-directory: canonical/projects/lsuperagent-control-center
+        run: pnpm install --frozen-lockfile
+
+      - name: Build both applications
+        run: |
+          set -euo pipefail
+          (cd canonical/projects/lsuperagent-control-center && pnpm build)
+          (cd lsuperagent-pro && pnpm build)
+
+      - name: Generate ephemeral HMAC key
+        id: hmac
+        shell: bash
+        run: |
+          set -euo pipefail
+          HMAC_SECRET="$(openssl rand -hex 32)"
+          echo "::add-mask::$HMAC_SECRET"
+          echo "HMAC_SECRET=$HMAC_SECRET" >> "$GITHUB_ENV"
+
+      - name: Start canonical gateway locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd canonical/projects/lsuperagent-control-center
+          LSUPERAGENT_GATEWAY_HMAC_SECRET="$HMAC_SECRET" \
+          LSUPERAGENT_GATEWAY_ALLOWED_CLIENTS="lsuperagent-pro" \
+          nohup pnpm exec next start -H 127.0.0.1 -p 3001 >/tmp/canonical.log 2>&1 &
+          echo $! >/tmp/canonical.pid
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3001/api/health >/tmp/canonical-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/canonical.log
+          exit 1
+
+      - name: Install cloudflared
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            --output /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared --version
+
+      - name: Open ephemeral HTTPS tunnel
+        id: tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3001 \
+            >/tmp/cloudflared.log 2>&1 &
+          echo $! >/tmp/cloudflared.pid
+
+          TUNNEL_URL=""
+          for i in $(seq 1 45); do
+            TUNNEL_URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -n1 || true)"
+            if [ -n "$TUNNEL_URL" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$TUNNEL_URL" ]; then
+            cat /tmp/cloudflared.log
+            exit 1
+          fi
+
+          echo "GATEWAY_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
+          echo "url=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
+
+          for i in $(seq 1 30); do
+            if curl --fail --silent "$TUNNEL_URL/api/health" >/tmp/tunnel-health.json; then
+              cat /tmp/tunnel-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/cloudflared.log
+          exit 1
+
+      - name: Start PRO server against tunneled gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd lsuperagent-pro
+          LSUPERAGENT_GATEWAY_URL="$GATEWAY_URL" \
+          LSUPERAGENT_GATEWAY_CLIENT_ID="lsuperagent-pro" \
+          LSUPERAGENT_GATEWAY_HMAC_SECRET="$HMAC_SECRET" \
+          nohup pnpm exec next start -H 127.0.0.1 -p 3002 >/tmp/pro.log 2>&1 &
+          echo $! >/tmp/pro.pid
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3002/api/health >/tmp/pro-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/pro.log
+          exit 1
+
+      - name: Verify signed PRO to canonical HTTPS round-trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTTP_CODE="$(curl --silent --show-error \
+            --output /tmp/r3-network-response.json \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header 'content-type: application/json' \
+            --data '{"message":"r3-network-probe","workspaceId":null}' \
+            http://127.0.0.1:3002/api/chat)"
+
+          cat /tmp/r3-network-response.json
+          test "$HTTP_CODE" = "503"
+
+          node <<'NODE'
+          const fs = require('node:fs')
+          const body = JSON.parse(fs.readFileSync('/tmp/r3-network-response.json', 'utf8'))
+          if (body.code !== 'UPSTREAM_UNAVAILABLE') throw new Error('unexpected code')
+          if (body.gateway !== 'CONNECTED') throw new Error('gateway not connected')
+          if (body.backend !== 'NOT_CONNECTED') throw new Error('backend state drift')
+          if (typeof body.requestId !== 'string' || body.requestId.length < 8) throw new Error('missing requestId')
+          console.log(`R3_NETWORK_VERIFIED requestId=${body.requestId}`)
+          NODE
+
+          {
+            echo '## PRO-R3 Network Verification'
+            echo ''
+            echo '- HTTPS tunnel: PASS'
+            echo '- HMAC-SHA256 v1: PASS'
+            echo '- PRO → Canonical Gateway: PASS'
+            echo '- HTTP contract: 503 UPSTREAM_UNAVAILABLE'
+            echo '- gateway: CONNECTED'
+            echo '- backend: NOT_CONNECTED'
+            echo '- provider/model execution: DISABLED'
+            echo '- persistent secret: NONE (ephemeral per run)'
+            echo '- production/DNS/custom domain: UNCHANGED'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo '--- canonical.log ---'
+          cat /tmp/canonical.log 2>/dev/null || true
+          echo '--- cloudflared.log ---'
+          cat /tmp/cloudflared.log 2>/dev/null || true
+          echo '--- pro.log ---'
+          cat /tmp/pro.log 2>/dev/null || true
+          echo '--- response ---'
+          cat /tmp/r3-network-response.json 2>/dev/null || true
+
+      - name: Cleanup ephemeral processes
+        if: always()
+        shell: bash
+        run: |
+          for pidfile in /tmp/pro.pid /tmp/cloudflared.pid /tmp/canonical.pid; do
+            if [ -f "$pidfile" ]; then
+              kill "$(cat "$pidfile")" 2>/dev/null || true
+            fi
+          done

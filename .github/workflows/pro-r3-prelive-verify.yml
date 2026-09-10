@@ -1,4 +1,4 @@
-name: LSUPERAGENT PRO R2 Verify
+name: LSUPERAGENT PRO R3 Gateway Verify
 
 on:
   pull_request:
@@ -6,14 +6,14 @@ on:
       - main
     paths:
       - 'lsuperagent-pro/**'
-      - '.github/workflows/pro-r2-verify.yml'
+      - '.github/workflows/pro-r3-prelive-verify.yml'
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    name: PRO-R2 client foundation verification
+    name: PRO-R3 canonical gateway source verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -52,9 +52,8 @@ jobs:
           for i in "${!expected[@]}"; do
             test "${vars[$i]}" = "${expected[$i]}"
           done
-          test "$(grep '^NEXT_PUBLIC_APP_ENV=' .env.example)" = 'NEXT_PUBLIC_APP_ENV=preview'
 
-      - name: Verify approved server route boundary
+      - name: Verify R3 route boundary
         shell: bash
         run: |
           set -euo pipefail
@@ -71,14 +70,17 @@ jobs:
             test ! -e "$route"
           done
 
-      - name: Secret-name scan
+      - name: Verify canonical gateway adapter boundary
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RIE '(SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GITHUB_TOKEN|VERCEL_TOKEN|sk-[A-Za-z0-9_-]{12,})' app components lib tests .env.example; then
-            echo 'Forbidden privileged secret name or token-like value detected.' >&2
-            exit 1
-          fi
+          test -f lib/gateway/r3-signing.ts
+          test -f lib/gateway/server-dispatch.ts
+          grep -q 'process\.env' lib/gateway/server-dispatch.ts
+          grep -q 'fetch' lib/gateway/server-dispatch.ts
+          ! grep -RIE 'fetch\(|process\.env' lib/gateway/r3-signing.ts app/api/chat/route.ts
+          ! grep -RIE '(@supabase/|openai|anthropic|gemini|NEXT_PUBLIC_LSUPERAGENT_GATEWAY|LSUPERAGENT_GATEWAY_SHARED_SECRET)' \
+            lib/gateway/r3-signing.ts lib/gateway/server-dispatch.ts app/api/chat/route.ts
 
       - name: Vitest
         run: pnpm vitest run

@@ -7,11 +7,12 @@ import Home from '../app/page'
 afterEach(() => cleanup())
 
 describe('LSUPERAGENT PRO R1 contract', () => {
-  it('renders alternate-client identity with disconnected status', () => {
+  it('renders the V5 chat-first identity without claiming runtime connectivity', () => {
     render(<Home />)
-    expect(screen.getByRole('heading', { name: /LSUPERAGENT PRO/i })).toBeInTheDocument()
-    expect(screen.getByText('Alternate Client')).toBeInTheDocument()
-    expect(screen.getAllByText('NOT_CONNECTED').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /Ready when you are, there/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Bank\./i)).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Sheetz, LS_BOTAGENT' })).toBeInTheDocument()
+    expect(screen.getByText('Preview + owner login')).toBeInTheDocument()
   })
 
   it('contains only the approved browser-safe environment contract', () => {

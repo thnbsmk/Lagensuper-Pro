@@ -13,7 +13,6 @@ const modulePages = [
 ] as const
 
 const prohibitedServerRoutes = [
-  'app/api/chat/route.ts',
   'app/api/execute/route.ts',
   'app/api/memory/route.ts',
   'app/api/memory/candidate/route.ts',
@@ -28,8 +27,9 @@ describe('PRO-R2 route and authority boundary', () => {
     }
   })
 
-  it('keeps /api/health as the only implemented PRO-R2 server route', () => {
+  it('allows only health plus the PRO-R3 pre-live chat boundary', () => {
     expect(existsSync(resolve(process.cwd(), 'app/api/health/route.ts'))).toBe(true)
+    expect(existsSync(resolve(process.cwd(), 'app/api/chat/route.ts'))).toBe(true)
     for (const route of prohibitedServerRoutes) {
       expect(existsSync(resolve(process.cwd(), route))).toBe(false)
     }

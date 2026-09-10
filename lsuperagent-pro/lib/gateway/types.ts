@@ -33,3 +33,43 @@ export interface GatewaySnapshot {
   gateway: ConnectionStatus
   backend: ConnectionStatus
 }
+
+export type ChatRequest = {
+  message: string
+  workspaceId?: string | null
+}
+
+export type GatewayContext = {
+  requestId: string
+  userId: null
+  workspaceId: string | null
+  action: 'chat'
+  input: { message: string }
+  receivedAt: string
+}
+
+export type PublicGatewayErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'INVALID_REQUEST'
+  | 'POLICY_BLOCKED'
+  | 'UPSTREAM_UNAVAILABLE'
+  | 'AUDIT_WRITE_FAILED'
+  | 'INTERNAL_ERROR'
+
+export type GatewayDispatchResult =
+  | { status: 'not_connected'; requestId: string }
+  | {
+      status: 'gateway_connected'
+      requestId: string
+      backend: 'not_connected'
+    }
+  | {
+      status: 'gateway_connected'
+      requestId: string
+      backend: 'connected'
+      provider: 'disabled'
+    }
+  | { status: 'verified'; requestId: string; data: unknown }
+  | { status: 'blocked'; requestId: string; code: PublicGatewayErrorCode }
+  | { status: 'failed'; requestId: string; code: PublicGatewayErrorCode }

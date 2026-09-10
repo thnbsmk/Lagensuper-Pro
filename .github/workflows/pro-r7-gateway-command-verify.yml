@@ -1,0 +1,39 @@
+name: PRO R7 Gateway Command Verify
+
+on:
+  push:
+    branches:
+      - agent/pro-r7-gateway-command-v1
+  pull_request:
+    paths:
+      - 'lsuperagent-pro/app/api/chat/**'
+      - 'lsuperagent-pro/lib/gateway/**'
+      - 'lsuperagent-pro/tests/pro-r7-*.test.ts'
+      - '.github/workflows/pro-r7-gateway-command-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: PRO R7 authenticated command verification
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: lsuperagent-pro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: lsuperagent-pro/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm vitest run tests/pro-r7-command-dispatch.test.ts tests/pro-r7-chat-route.test.ts
+      - run: pnpm vitest run
+      - run: pnpm lint
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build
