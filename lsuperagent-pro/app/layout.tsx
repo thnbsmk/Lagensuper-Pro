@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { Analytics } from '@vercel/analytics/next';
 import { AppShell } from '@/components/shell/AppShell'
 import "./globals.css";
 
@@ -29,6 +30,7 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <AppShell>{children}</AppShell>
+        <Analytics />
       </body>
     </html>
   );
