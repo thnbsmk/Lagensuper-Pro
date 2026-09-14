@@ -1,0 +1,37 @@
+## Vercel Speed Insights Installation
+
+Successfully installed and configured Vercel Speed Insights for the Next.js project.
+
+### What was implemented:
+
+1. **Package Installation**
+   - Installed `@vercel/speed-insights` version 2.0.0 using pnpm
+   - Updated package.json with the new dependency
+   - Updated pnpm-lock.yaml lockfile
+
+2. **Integration with Next.js**
+   - Added SpeedInsights component import from `@vercel/speed-insights/next` to the root layout
+   - Placed `<SpeedInsights />` component in the body of the root layout (app/layout.tsx)
+   - Followed the official Vercel documentation for Next.js App Router integration
+
+### Files Modified:
+
+- **app/layout.tsx**: Added SpeedInsights import and component
+- **package.json**: Added @vercel/speed-insights dependency
+- **pnpm-lock.yaml**: Updated lockfile with new dependencies
+
+### Implementation Details:
+
+The SpeedInsights component was added to the root layout following the official Vercel documentation. The component is placed at the end of the body element, after the AppShell component, which is the recommended location for analytics components.
+
+### Verification:
+
+- ✅ Linter passed with no new errors (only pre-existing warnings)
+- ✅ All tests passed (67 tests across 15 test files)
+- ⚠️ Build has a pre-existing issue with API routes and static export configuration (unrelated to Speed Insights)
+
+### Notes:
+
+The Speed Insights component will automatically collect and report Core Web Vitals and performance metrics when the application is deployed to Vercel. No additional configuration is required. The metrics will be available in the Vercel dashboard under the Speed Insights section.
+
+The build failure encountered is a pre-existing issue with the API route `/api/auth/verify-session` not being properly configured for static export (output: "export" in next.config.ts). This is not related to the Speed Insights implementation.
